@@ -869,6 +869,7 @@ class Rays:
         self.radius = radius
         if generate:
             self.coords = generate_random_coordinates(self.N, self.center, self.radius)
+            self.impact_par = np.sqrt(self.coords[:,0]**2 + self.coords[:,1]**2)
             self.index = np.arange(N) #for indexing spectra
 
         self.clouds = {}
@@ -876,6 +877,15 @@ class Rays:
         self.n_clouds = np.zeros(N, dtype=float)
         self.EWs = np.zeros(N, dtype=float)
         self.spectra = {}
+
+        ## KHRR adding here -- assuming max number of cloudlets along sightline will always be < 100
+        #from IPython import embed
+        #embed()
+        if(N):
+            self.indiv_N = np.zeros((N,300))
+            self.indiv_bD = np.zeros((N,300))
+            self.indiv_dv = np.zeros((N,300))
+
 
     def __repr__(self):
         return('Rays: %d rays centered on %s with radius %f' % (self.N, self.center, self.radius))
@@ -927,6 +937,9 @@ class Rays:
             f.create_dataset("column_densities", data=self.column_densities)
             f.create_dataset("EWs", data=self.EWs)
             f.create_dataset("n_clouds", data=self.n_clouds)
+            f.create_dataset("indiv_N", data=self.indiv_N)
+            f.create_dataset("indiv_bD", data=self.indiv_bD)
+            f.create_dataset("indiv_dv", data=self.indiv_dv)
             f.attrs['N'] = self.N
             f.attrs['center'] = self.center
             f.attrs['radius'] = self.radius
@@ -944,12 +957,15 @@ class Rays:
             self.column_densities = f["column_densities"][:]
             self.EWs = f["EWs"][:]
             self.n_clouds = f["n_clouds"][:]
+            self.indiv_N = f["indiv_N"][:]
+            self.indiv_bD = f["indiv_bD"][:]
+            self.indiv_dv = f["indiv_dv"][:]
             self.N = f.attrs['N']
             self.center = f.attrs['center']
             self.radius = f.attrs['radius']
         return
 
-def calculate_intersections(coord, clouds):
+def calculate_intersections(coord, clouds, GIBLE=False):
     """
     Calculate if a Ray intersects a population of clouds of size r.
     If no intersection, or if tangent to sphere: return 0
@@ -966,12 +982,16 @@ def calculate_intersections(coord, clouds):
     # so suppressing that temporarily
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        pathlengths = 2*(clouds.radii**2 - d**2)**0.5
+
+        if(GIBLE):
+            pathlengths = 2*(clouds.radii.value**2 - d**2)**0.5
+        else:
+            pathlengths = 2*(clouds.radii**2 - d**2)**0.5
 
     # when d>r, pathlengths will be imaginary
     return np.nan_to_num(pathlengths)
 
-def deposit_voigt(dl, rv, column_density, lambda_0, f_value, gamma, thermal_b, lambda_field):
+def deposit_voigt(rv, column_density, lambda_0, f_value, gamma, thermal_b, lambda_field):
     """
     Deposit a voigt profile into a spectrum.
 
@@ -987,6 +1007,8 @@ def deposit_voigt(dl, rv, column_density, lambda_0, f_value, gamma, thermal_b, l
     gamma: multiplicity of transition
     thermal_b: thermal broadening b parameter
     lambda_field: array of wavelengths in angstroms
+
+    KHRR removed dl from input
 
     """
     # Doppler shift = vz (ignores cosmological redshift!)
@@ -1178,6 +1200,9 @@ class SpectrumGenerator():
         rays.column_densities[i] = np.sum(mgII_column_densities)
         self.tau_field = np.zeros_like(self.lambda_field)
         self.tau_fields = np.zeros([len(mask), self.lambda_field.shape[0]])
+        self.column_density_list = np.zeros(len(mask))
+        self.dv_list = np.zeros(len(mask))
+        self.bD_list = np.zeros(len(mask))
 
         if self.subcloud_turb:
             # Adding intrinsic turbulence in each cloud to thermal_b so voigt profile
@@ -1189,10 +1214,18 @@ class SpectrumGenerator():
             broadening = np.repeat(self.thermal_b, len(mask))
 
         for index, j in enumerate(mask):
-            self.tau_fields[index,:] += deposit_voigt(dls[j], self.clouds.velocities[j,2],
+            self.tau_fields[index,:] += deposit_voigt(self.clouds.velocities[j,2],
                                         mgII_column_densities[j], \
                                         self.lambda_0, self.f_value, self.gamma, \
                                         broadening[index], self.lambda_field)
+            self.column_density_list[index] = mgII_column_densities[j]
+            self.dv_list[index] = self.clouds.velocities[j,2]
+            self.bD_list[index] = broadening[index].to('km/s')
+
+        ## KHRR adding here
+        rays.indiv_N[i,:len(mask)] = self.column_density_list
+        rays.indiv_bD[i,:len(mask)] = self.bD_list
+        rays.indiv_dv[i,:len(mask)] = self.dv_list
 
         self.tau_field = np.sum(self.tau_fields, axis=0)
         self.flux_fields = np.exp(-self.tau_fields)
