@@ -58,7 +58,7 @@ def make_complex_for_gible_cloud(flg='MCLMIN', uppath='./GIBLE_Complex_Suite', h
 
     # cloud mass min/max (Msun)
     params['mclmin'] = 1e1              # Default: 10 Msun
-    params['mclmax'] = mass / 10.0      # Default: 100000 Msun  -- SHOULD WE CHANGE THIS????
+    params['mclmax'] = mass             # Default: 100000 Msun 
 
     # cloud position from center min/max (kpc)
     params['dclmin'] = 0.001            # Default: 0.1 kpc
@@ -74,6 +74,9 @@ def make_complex_for_gible_cloud(flg='MCLMIN', uppath='./GIBLE_Complex_Suite', h
     params['rho_cl'] = params['n_cl'] * proton_mass
     params['total_mass'] = mass         # Default: 1e6 Msun
     params['clobber'] = True            # Default: True
+
+    params['gible_index'] = cloud_indx
+    params['gible_halo_name'] = haloname
 
     # Ensuring seed state is same for each iteration
     state = np.random.get_state()
@@ -190,8 +193,7 @@ def setup_and_run_gible_suite(filename = '/Users/krubin/Research/GPG/GIBLE/Input
         velocity_dispersions=gb_cloudVelDisp, masses=gb_cloudMass, \
         number_of_cells=gb_cloudNumCells, metallicities=gb_cloudMetal, radii=gb_cloudSize)
 
-
-    for i, index in enumerate(gible_clouds.index[0:100]):
+    for i, index in enumerate(gible_clouds.index):
 
         # Select resolved clouds
         if (gible_clouds.masses.to('Msun').value[i] > resolved_lim):
@@ -203,6 +205,7 @@ def setup_and_run_gible_suite(filename = '/Users/krubin/Research/GPG/GIBLE/Input
                 number_density=gible_clouds.number_densities.to(1.0/cm**3)[i], \
                 radius=gible_clouds.radii.to('kpc').value[i], metallicity=gible_clouds.metallicities[i])
 
+
             
 if __name__ == '__main__':
 
@@ -211,9 +214,9 @@ if __name__ == '__main__':
     resolved_lim = 10**5  # Need to decide on this!!
     filename = '/Users/krubin/Research/GPG/GIBLE/Inputs/CloudCatalog_S98RF512_z0.hdf5'
 
-    #setup_and_run_gible_suite(filename=filename, haloname=haloname, resolved_lim=resolved_lim, par_flg='MCLMIN')
+    setup_and_run_gible_suite(filename=filename, haloname=haloname, resolved_lim=resolved_lim, par_flg='MCLMIN')
 
     ## after running the above, and make the rays files:
-    make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False)
+    #make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False)
 
     embed()
