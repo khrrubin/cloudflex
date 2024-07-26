@@ -878,13 +878,13 @@ class Rays:
         self.EWs = np.zeros(N, dtype=float)
         self.spectra = {}
 
-        ## KHRR adding here -- assuming max number of cloudlets along sightline will always be < 100
+        ## KHRR adding here -- assuming max number of cloudlets along sightline will always be < 1000
         #from IPython import embed
         #embed()
         if(N):
-            self.indiv_N = np.zeros((N,300))
-            self.indiv_bD = np.zeros((N,300))
-            self.indiv_dv = np.zeros((N,300))
+            self.indiv_N = np.zeros((N,1000))
+            self.indiv_bD = np.zeros((N,1000))
+            self.indiv_dv = np.zeros((N,1000))
 
 
     def __repr__(self):
