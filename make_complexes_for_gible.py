@@ -15,6 +15,10 @@ from cloudflex import \
     plot_covering_frac, \
     plot_clouds_buffer, \
     make_quad_plot
+
+from refractive_scattering import \
+    PathGenerator, \
+    RefractionPaths
     
 from observe_halo import GIBLEClouds
 
@@ -172,6 +176,47 @@ def create_rays(clouds_fil, rays_fil):
     # plot_histogram(rays.EWs, "equivalent widths", clouds, xrange=[0, 1.0], n_bins=40)
             
 
+def make_refraction_paths(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False):
+
+    os.chdir(os.path.join(uppath,haloname,par_flg))
+    dirs = os.listdir(path='.')
+
+    for dir in dirs:
+        os.chdir(dir)
+        clouds_files = glob.glob('clouds*.h5')
+
+        for fil in clouds_files:
+            namestr = fil[6:-3]
+            rpths_fil = 'rpths%s.json' % namestr
+
+            if not (os.path.isfile(rpths_fil)) or overwrite:
+                create_refraction_paths(fil,rpths_fil)
+            else:
+                print('Skipping ', rpths_fil)
+
+        os.chdir('..')
+
+    os.chdir('../../..')
+
+
+def create_refraction_paths(clouds_fil, rpths_fil):
+    ## Taken from make_rays.py
+
+    clouds = Clouds()
+    clouds.load(clouds_fil)
+    params = clouds.params
+    np.random.seed(seed=params['seed'])
+
+    ## Generate and Plot Spectra for N random rays passing through domain
+    ## Also plot distribution of clouds and rays
+
+    # Create N random Rays passing through domain
+    N = 10000
+    pg = PathGenerator(clouds)
+    refractionpaths = pg.generate_refractionpath_sample(N, params['center'],  params['dclmax'])
+    refractionpaths.save(rpths_fil)
+
+
 
 ###################################################################
 ######## Read in cloud catalog and set up complex suite ###########
@@ -214,9 +259,13 @@ if __name__ == '__main__':
     resolved_lim = 10**5  # Need to decide on this!!
     filename = '/Users/krubin/Research/GPG/GIBLE/Inputs/CloudCatalog_S98RF512_z0.hdf5'
 
-    setup_and_run_gible_suite(filename=filename, haloname=haloname, resolved_lim=resolved_lim, par_flg='MCLMIN')
+    #setup_and_run_gible_suite(filename=filename, haloname=haloname, resolved_lim=resolved_lim, par_flg='MCLMIN')
 
     ## after running the above, and make the rays files:
     #make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False)
+
+    ## to generate refraction paths for FRB predictions:
+    make_refraction_paths(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False)
+
 
     embed()
