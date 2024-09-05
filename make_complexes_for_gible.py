@@ -118,7 +118,11 @@ def make_complex_for_gible_cloud(flg='MCLMIN', uppath='./GIBLE_Complex_Suite', h
                 params['mclmin'] = mclmin
 
                 clouds = Clouds(params=params)
-                clouds.generate_clouds()
+
+                if (mass > 5.5e7):
+                    clouds.generate_clouds(loop_velocities=True)
+                else:
+                    clouds.generate_clouds(loop_velocities=False)
                 clouds.save(cloud_fil)
                 
         
@@ -240,7 +244,7 @@ def setup_and_run_gible_suite(filename = '/Users/krubin/Research/GPG/GIBLE/Input
 
     for i, index in enumerate(gible_clouds.index):
 
-        # Select resolved clouds
+        # Select resolved 
         if (gible_clouds.masses.to('Msun').value[i] > resolved_lim):
 
             print("Generating complexes for cloud index ", index, " of ", len(gible_clouds.index), " total clouds with mass = ", gible_clouds.masses.to('Msun')[i])
@@ -259,13 +263,13 @@ if __name__ == '__main__':
     resolved_lim = 10**5  # Need to decide on this!!
     filename = '/Users/krubin/Research/GPG/GIBLE/Inputs/CloudCatalog_S98RF512_z0.hdf5'
 
-    #setup_and_run_gible_suite(filename=filename, haloname=haloname, resolved_lim=resolved_lim, par_flg='MCLMIN')
+    setup_and_run_gible_suite(filename=filename, haloname=haloname, resolved_lim=resolved_lim, par_flg='MCLMIN')
 
     ## after running the above, and make the rays files:
     #make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False)
 
     ## to generate refraction paths for FRB predictions:
-    make_refraction_paths(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False)
+    #make_refraction_paths(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False)
 
 
     embed()

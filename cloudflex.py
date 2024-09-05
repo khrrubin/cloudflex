@@ -552,7 +552,7 @@ centers: %s\n velocities: %s\n params: %s""" % (len(self.masses), self.masses[0:
 
         return np.array([vx, vy, vz]).T
 
-    def generate_clouds(self):
+    def generate_clouds(self, loop_velocities=False):
         """
         """
         if self.params['clobber']:
@@ -586,18 +586,28 @@ centers: %s\n velocities: %s\n params: %s""" % (len(self.masses), self.masses[0:
         radii = self.calculate_cloud_radii(masses)
         #print('m_cloud = %s Msun; r_cloud = %s kpc' % (masses[0], radii[0]))
 
-        #import cProfile
-        #cProfile.runctx("self.cloud_loop(radii, p['clobber'])", globals(), locals())
-        #import sys; sys.exit()
-        #centers = self.cloud_loop_kdtree(radii, p['clobber'])
-        centers = self.cloud_loop(radii, p['clobber'])
-        # Cloud positions are now generated, so now store to Clouds object and save.
+        if(loop_velocities==False):
+            #import cProfile
+            #cProfile.runctx("self.cloud_loop(radii, p['clobber'])", globals(), locals())
+            #import sys; sys.exit()
+            #centers = self.cloud_loop_kdtree(radii, p['clobber'])
+            centers = self.cloud_loop(radii, p['clobber'], calc_velocities=False)
+            # Cloud positions are now generated, so now store to Clouds object and save.
 
-        self.masses = masses
-        self.centers = np.array(centers)
-        self.radii = radii
-        self.velocities = self.generate_velocities(centers)
-        #plot_spectrum1D(pertx, perty, pertz, p['n'], p['kmin'], p['kmax'])
+            self.masses = masses
+            self.centers = np.array(centers)
+            self.radii = radii
+            self.velocities = self.generate_velocities(centers)
+            #plot_spectrum1D(pertx, perty, pertz, p['n'], p['kmin'], p['kmax'])
+
+        elif(loop_velocities==True):
+
+            centers, velocities = self.cloud_loop(radii, p['clobber'], calc_velocities=True)
+            self.masses = masses
+            self.centers = np.array(centers)
+            self.radii = radii
+            self.velocities = velocities 
+
         self.calculate_stuff()
 
         #self.turb_broad = self.calculate_subcloud_turbulent_velocity(2.0*radii)
@@ -698,7 +708,7 @@ centers: %s\n velocities: %s\n params: %s""" % (len(self.masses), self.masses[0:
             centers.append(center)
         return centers
 
-    def cloud_loop(self, radii, clobber):
+    def cloud_loop(self, radii, clobber, calc_velocities=False):
         """
         Most of the time in generating clouds is spent in this loop
         """
@@ -707,6 +717,11 @@ centers: %s\n velocities: %s\n params: %s""" % (len(self.masses), self.masses[0:
         centers = np.zeros([N, 3])
         center = self.generate_cloud_position(1)[0]
         centers[0,:] = center
+
+        if(calc_velocities):
+            velocities = np.zeros([N,3])
+            velocity = self.generate_velocity(center)
+            velocities[0,:] = velocity
 
         # Generate individual cloud position with check to ensure they don't clobber others
         for i in tqdm(range(1,len(radii)), "Generating Clouds"):
@@ -730,7 +745,16 @@ centers: %s\n velocities: %s\n params: %s""" % (len(self.masses), self.masses[0:
 
             # If cloud doesn't clobber, then append to lists
             centers[i,:] = center
-        return centers
+
+            if(calc_velocities):
+                velocity = self.generate_velocity(center)
+                velocities[i,:] = velocity
+
+        if(calc_velocities):
+            return centers, velocities
+        else:        
+            return centers
+
 
     def calculate_turbulence(self, N_points=1e5, N_pairs=1e7, plot=False):
         """
@@ -1623,7 +1647,7 @@ def create_and_plot_clouds(params, cloud_fil='clouds.h5'):
     """
     # Actually generate the clouds using parameters, then store to disk for later use
     clouds = Clouds(params=params)
-    clouds.generate_clouds()
+    clouds.generate_clouds(loop_velocities=False)
     #clouds.save('clouds.h5')
     clouds.save(cloud_fil)
     plot_clouds(clouds=clouds, filename='clouds.png')
@@ -1856,6 +1880,48 @@ def calc_mgII_frac(n_cl):
     log_n_cl = np.log10(n_cl)
     log_MgII =  np.interp(log_n_cl, log_dens_bins, log_MgII_vals)
     return 10**log_MgII
+
+def calc_HI_frac(n_cl, X=0.74):
+    """
+    This function is copied from calc_MgII_frac above, and 
+    estimates the HI ion fraction based on the cool cloud number
+    density.  This just does linear interpolation from the Trident ion balance lookup
+    table which is based on many CLOUDY models assuming a Haardt-Madau 2012 UV
+    background.  For this function, we currently assume z=0.25 and T=10^4K.
+
+    This function requires the ion balance table to be present in the cloudflex
+    directory: hm2012_hr.h5 or in the directory where Trident automatically
+    installs it: ~/.trident
+
+    To download this file, either install and run Trident for the first time,
+    or download it and unzip it manually from:
+
+    http://trident-project.org/data/ion_table/
+
+    Notably, linear interpolation takes place in log space for the density as well as
+    the ion fraction.
+
+    Implemented by KHRR
+    """
+
+    fn = 'hm2012_hr.h5'
+    cloudflex_dir = os.path.split(__file__)[0]
+    local_fn = os.path.join(cloudflex_dir, fn)
+    global_fn = os.path.join(os.path.expanduser('~'), '.trident', fn)
+    if os.path.exists(local_fn):
+        ion_balance_fn = local_fn
+    elif os.path.exists(global_fn):
+        ion_balance_fn = global_fn
+    else:
+        raise FileNotFoundError('CloudFlex requires trident data file: hm2012_hr.h5. See docs.')
+    f = h5py.File(ion_balance_fn, 'r')
+    # Dimensions: ionization level, log nH, redshift, temperature (??)
+    log_HI_vals = f['H'][0,:,2,120] # log(H I / H abundance)
+    log_dens_bins = f['H'].attrs['Parameter1'] # log n(H)
+    log_n_cl = np.log10(n_cl)
+    log_HI =  np.interp(X*log_n_cl, log_dens_bins, log_HI_vals)
+
+    return 10**log_HI
 
 
 def make_quad_plot(rays_list, clouds_list, filename='quad.png', flgs_dict=None):
