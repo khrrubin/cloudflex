@@ -492,16 +492,16 @@ centers: %s\n velocities: %s\n params: %s""" % (len(self.masses), self.masses[0:
         radii = (3*masses*Msun/ (4*np.pi*p['rho_cl']))**(1/3)
         return radii.to('kpc').d
 
-    def generate_velocity(self, center):
+    def generate_velocity(self, center, pertx, perty, pertz):
         """
         Generate cloud velocities for a cloud center according to turbulent velocity
         spectrum on a 128**3 grid; DEPRECATED: USE generate_velocities()
         """
         # Set up perturbations for generating cloud velocities
         p = self.params
-        pertx, perty, pertz = \
-            make_perturbations(p['n'], p['kmin'], p['kmax'],
-                               p['beta'],  p['f_solenoidal'], p['vmax'])
+        #pertx, perty, pertz = \
+        #    make_perturbations(p['n'], p['kmin'], p['kmax'],
+        #                       p['beta'],  p['f_solenoidal'], p['vmax'])
         X=Y=Z = np.linspace(-p['dclmax'], p['dclmax'], p['N']) * kpc
 
         # For single center at a time:
@@ -719,8 +719,13 @@ centers: %s\n velocities: %s\n params: %s""" % (len(self.masses), self.masses[0:
         centers[0,:] = center
 
         if(calc_velocities):
+
+            p = self.params
+            pertx, perty, pertz = \
+                make_perturbations(p['n'], p['kmin'], p['kmax'], p['beta'], p['f_solenoidal'], p['vmax'])
+
             velocities = np.zeros([N,3])
-            velocity = self.generate_velocity(center)
+            velocity = self.generate_velocity(center, pertx, perty, pertz)
             velocities[0,:] = velocity
 
         # Generate individual cloud position with check to ensure they don't clobber others
@@ -747,7 +752,7 @@ centers: %s\n velocities: %s\n params: %s""" % (len(self.masses), self.masses[0:
             centers[i,:] = center
 
             if(calc_velocities):
-                velocity = self.generate_velocity(center)
+                velocity = self.generate_velocity(center, pertx, perty, pertz)
                 velocities[i,:] = velocity
 
         if(calc_velocities):
