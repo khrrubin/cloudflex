@@ -134,7 +134,7 @@ def make_complex_for_gible_cloud(flg='MCLMIN', uppath='./GIBLE_Complex_Suite', h
     
 
 
-def make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False):
+def make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False, no_voigt=False):
 
     os.chdir(os.path.join(uppath,haloname,par_flg))
     dirs = os.listdir(path='.')
@@ -145,10 +145,10 @@ def make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', 
 
         for fil in clouds_files:
             namestr = fil[6:-3]
-            rays_fil = 'rays%s.h5' % namestr
+            rays_fil = 'rays%s.json' % namestr
 
             if not (os.path.isfile(rays_fil)) or overwrite:
-                create_rays(fil,rays_fil)
+                create_rays(fil,rays_fil,no_voigt=no_voigt)
             else:
                 print('Skipping ', rays_fil)
 
@@ -157,7 +157,7 @@ def make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', 
     os.chdir('../../..')
 
 
-def create_rays(clouds_fil, rays_fil):
+def create_rays(clouds_fil, rays_fil, no_voigt=False):
     ## Taken from make_rays.py
 
     clouds = Clouds()
@@ -169,11 +169,11 @@ def create_rays(clouds_fil, rays_fil):
     ## Also plot distribution of clouds and rays
 
     # Create N random Rays passing through domain
-    N = 10000
+    N = 1000
     sg = SpectrumGenerator(clouds, subcloud_turb=True)
     rays = sg.generate_ray_sample(N, params['center'],  params['dclmax'],
-                                  first_n_to_plot=0, attach_spectra=False)
-    rays.save(rays_fil)
+                                  first_n_to_plot=0, attach_spectra=False, no_voigt=True)
+    rays.save_json(rays_fil)
 
     # Create histograms of EW, clouds intersected, and column density of all rays
     # plot_histogram(rays.column_densities, "column densities", clouds, log=True, xrange=[11,18])
@@ -263,10 +263,10 @@ if __name__ == '__main__':
     resolved_lim = 10**5  # Need to decide on this!!
     filename = '/Users/krubin/Research/GPG/GIBLE/Inputs/CloudCatalog_S98RF512_z0.hdf5'
 
-    setup_and_run_gible_suite(filename=filename, haloname=haloname, resolved_lim=resolved_lim, par_flg='MCLMIN')
+    #setup_and_run_gible_suite(filename=filename, haloname=haloname, resolved_lim=resolved_lim, par_flg='MCLMIN')
 
     ## after running the above, and make the rays files:
-    #make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False)
+    make_rays(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False, no_voigt=True)
 
     ## to generate refraction paths for FRB predictions:
     #make_refraction_paths(uppath='./GIBLE_Complex_Suite', haloname='S98', par_flg='MCLMIN', overwrite=False)

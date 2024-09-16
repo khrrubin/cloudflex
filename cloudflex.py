@@ -4,6 +4,7 @@ observations
 """
 
 import h5py
+import json
 import numpy as np
 import numpy.fft
 from math import *
@@ -900,6 +901,7 @@ class Rays:
             self.coords = generate_random_coordinates(self.N, self.center, self.radius)
             self.impact_par = np.sqrt(self.coords[:,0]**2 + self.coords[:,1]**2)
             self.index = np.arange(N) #for indexing spectra
+            self.pathdict = {k: [] for k in range(N)}
 
         self.clouds = {}
         self.column_densities = np.zeros(N, dtype=float)
@@ -910,10 +912,10 @@ class Rays:
         ## KHRR adding here -- assuming max number of cloudlets along sightline will always be < 1000
         #from IPython import embed
         #embed()
-        if(N):
-            self.indiv_N = np.zeros((N,1000))
-            self.indiv_bD = np.zeros((N,1000))
-            self.indiv_dv = np.zeros((N,1000))
+        #if(N):
+        #    self.indiv_N = np.zeros((N,1000))
+        #    self.indiv_bD = np.zeros((N,1000))
+        #    self.indiv_dv = np.zeros((N,1000))
 
 
     def __repr__(self):
@@ -993,6 +995,46 @@ class Rays:
             self.center = f.attrs['center']
             self.radius = f.attrs['radius']
         return
+
+    def save_json(self, filename):
+        """
+        Saves to a JSON file
+        """
+        print("Saving rays to %s" % filename)
+
+        from IPython import embed
+        embed()
+        self.pathdict["coords"] = self.coords.tolist()
+        self.pathdict["column_densities"] = self.column_densities.tolist()
+        self.pathdict["EWs"] = self.EWs.tolist()
+        self.pathdict["n_clouds"] = self.n_clouds.tolist()
+        self.pathdict["N"] = self.N
+        self.pathdict["center"] = self.center.tolist()
+        self.pathdict["max_complex_impact_par"] = self.radius
+        
+        with open(filename, 'wt') as fh:
+            json.dump(self.pathdict, fh, indent=4)
+
+        return
+
+    def load_json(self, filename):
+        """
+        Loads from JSON file -- NEEDS UPDATING
+        """
+        print("Loading rays from %s" % filename)
+        with open(filename, 'rt') as fh:
+
+            self.pathdict = json.load(fh) 
+            self.coords = self.pathdict["coords"]
+            self.column_densities = self.pathdict["column_densities"]
+            self.EWs = self.pathdict["EWs"]
+            self.n_clouds = self.pathdict["n_clouds"]
+            self.N = self.pathdict["N"]
+            self.center = self.pathdict["center"]
+            self.radius = self.pathdict["max_complex_impact_par"]
+            
+        return
+
 
 def calculate_intersections(coord, clouds, GIBLE=False):
     """
@@ -1158,6 +1200,7 @@ class SpectrumGenerator():
         temperature_cloud = p['T_cl']
         self.subcloud_turb = subcloud_turb
         self.metallicity_cloud = p['Z_cl']
+        self.X_hydrogen = 0.74 # Hydrogen mass fraction
 
         # Mg II Line Info
         self.lambda_0 = 2796.35 #* angstrom #AA
@@ -1206,7 +1249,7 @@ class SpectrumGenerator():
         self.sum_intersections = 0
         self.sum_column_density = 0
 
-    def make_spectrum(self, rays, i, mgII_frac, attach=False):
+    def make_spectrum(self, rays, i, mgII_frac, attach=False, no_voigt=False):
         """
         For a ray passing through the defined cloud distribution, Actually make the
         spectrum by stepping through and depositing voigt profiles for each cloud
@@ -1215,7 +1258,6 @@ class SpectrumGenerator():
         Optionally attach each spectrum to the Rays class that called it
         """
         Z_cl = self.metallicity_cloud # units of Zsolar
-        X_hydrogen = 0.74 # Hydrogen mass fraction
         self.rays = rays
         self.i = i
         dls = calculate_intersections(rays.coords[i], self.clouds) * kpc
@@ -1224,14 +1266,17 @@ class SpectrumGenerator():
         rays.clouds[i] = mask
         rays.n_clouds[i] = len(mask)
         column_densities = dls*self.clouds.params['n_cl'] / cm**3
-        mg_column_densities = solar_abundance['Mg']*column_densities * Z_cl * X_hydrogen
+        mg_column_densities = solar_abundance['Mg']*column_densities * Z_cl * self.X_hydrogen
         mgII_column_densities = mg_column_densities * mgII_frac
         rays.column_densities[i] = np.sum(mgII_column_densities)
         self.tau_field = np.zeros_like(self.lambda_field)
         self.tau_fields = np.zeros([len(mask), self.lambda_field.shape[0]])
-        self.column_density_list = np.zeros(len(mask))
-        self.dv_list = np.zeros(len(mask))
-        self.bD_list = np.zeros(len(mask))
+        #self.column_density_list = np.zeros(len(mask))
+        #self.dv_list = np.zeros(len(mask))
+        #self.bD_list = np.zeros(len(mask))
+
+        ipathdict = {}
+        ipathdict["n_clouds"] = len(mask)
 
         if self.subcloud_turb:
             # Adding intrinsic turbulence in each cloud to thermal_b so voigt profile
@@ -1243,37 +1288,52 @@ class SpectrumGenerator():
             broadening = np.repeat(self.thermal_b, len(mask))
 
         for index, j in enumerate(mask):
-            self.tau_fields[index,:] += deposit_voigt(self.clouds.velocities[j,2],
-                                        mgII_column_densities[j], \
-                                        self.lambda_0, self.f_value, self.gamma, \
-                                        broadening[index], self.lambda_field)
-            self.column_density_list[index] = mgII_column_densities[j]
-            self.dv_list[index] = self.clouds.velocities[j,2]
-            self.bD_list[index] = broadening[index].to('km/s')
 
+            if(no_voigt==False):
+                self.tau_fields[index,:] += deposit_voigt(self.clouds.velocities[j,2],
+                                            mgII_column_densities[j], \
+                                            self.lambda_0, self.f_value, self.gamma, \
+                                            broadening[index], self.lambda_field)
+            #self.column_density_list[index] = mgII_column_densities[j]
+            #self.dv_list[index] = self.clouds.velocities[j,2]
+            #self.bD_list[index] = broadening[index].to('km/s')
+            
         ## KHRR adding here
-        rays.indiv_N[i,:len(mask)] = self.column_density_list
-        rays.indiv_bD[i,:len(mask)] = self.bD_list
-        rays.indiv_dv[i,:len(mask)] = self.dv_list
+        if(len(mask) > 0):
+            ipathdict["column_density_list"] = mgII_column_densities.value[mask].tolist()
+            ipathdict["dv_list"] = self.clouds.velocities[mask,2].tolist()
+            ipathdict["bD_list"] = broadening.to('km/s').value.tolist()
 
-        self.tau_field = np.sum(self.tau_fields, axis=0)
-        self.flux_fields = np.exp(-self.tau_fields)
-        self.flux_field = np.exp(-self.tau_field)
+        print(i)
+        print(mgII_column_densities.value[mask])
+        print(self.clouds.velocities[mask,2])
+        print(broadening.to('km/s').value)
 
-        # keep track of how many spectra are being averaged together
+        rays.pathdict[i] = ipathdict
+        #rays.indiv_N[i,:len(mask)] = self.column_density_list
+        #rays.indiv_bD[i,:len(mask)] = self.bD_list
+        #rays.indiv_dv[i,:len(mask)] = self.dv_list
+
+        if(no_voigt==False):
+            self.tau_field = np.sum(self.tau_fields, axis=0)
+            self.flux_fields = np.exp(-self.tau_fields)
+            self.flux_field = np.exp(-self.tau_field)
+
+            # keep track of how many spectra are being averaged together
+            self.flux_sum_field += self.flux_field
+
         self.n_sightlines += 1
-        self.flux_sum_field += self.flux_field
         self.sum_intersections += rays.n_clouds[i]
         self.sum_column_density += rays.column_densities[i]
 
         # if the ray intersected clouds, then apply LSF and calculate EW
-        if rays.n_clouds[i] > 0:
+        if rays.n_clouds[i] > 0 and no_voigt==False:
             self.apply_LSF()
             self.calculate_equivalent_width()
             rays.EWs[i] = self.EW
 
         # Attach the spectra to the Rays object
-        if attach:
+        if attach and no_voigt==False:
             self.rays.spectra[i] = Spectrum(self.lambda_field, self.flux_field, \
                                             self.lambda_0, i, self.EW, \
                                             rays.column_densities[i])
@@ -1458,7 +1518,7 @@ class SpectrumGenerator():
         plt.close()
 
     def generate_ray_sample(self, N, center, radius, first_n_to_plot=0,
-                            component=True, ray_plot=True, attach_spectra=False):
+                            component=True, ray_plot=True, attach_spectra=False, no_voigt=False):
         """
         Create a sample of N rays spanning an aperture with center and radius specified.
         Calculate their spectra passing through the associated cloud distribution.
@@ -1468,15 +1528,15 @@ class SpectrumGenerator():
 
         # Determine Mg II ion abundance based on cool gas number density
         # mgII_frac = 0.33 # Accurate for n_cl = 0.01
-        mgII_frac = calc_mgII_frac(self.clouds.params['n_cl'])
+        mgII_frac = calc_mgII_frac(self.clouds.params['n_cl'], X=self.X_hydrogen)
 
         print("n_cl = %f" % self.clouds.params['n_cl'])
         print("mgII frac = %f" % mgII_frac)
 
         for i in tqdm(range(N), "Generating Rays"):
-            self.make_spectrum(rays, i, mgII_frac, attach=attach_spectra)
+            self.make_spectrum(rays, i, mgII_frac, attach=attach_spectra, no_voigt=no_voigt)
             # Plot spectrum after applying line spread function
-            if i < first_n_to_plot and self.EW > 0:
+            if i < first_n_to_plot and self.EW > 0 and no_voigt==False:
                 self.plot_spectrum(component=True, ray_plot=True)
             self.clear_spectrum()
         self.clear_spectrum(total=True)
@@ -1849,7 +1909,7 @@ def plot_multi_clouds_buffer(clouds_list):
     plt.savefig(fn)
     plt.clf()
 
-def calc_mgII_frac(n_cl):
+def calc_mgII_frac(n_cl, X=0.74):
     """
     This function estimates the Mg II ion fraction based on the cool cloud number
     density.  This just does linear interpolation from the Trident ion balance lookup
@@ -1883,7 +1943,10 @@ def calc_mgII_frac(n_cl):
     log_MgII_vals = f['Mg'][1,:,2,120] # log(Mg II / Mg abundance)
     log_dens_bins = f['Mg'].attrs['Parameter1'] # log n(H)
     log_n_cl = np.log10(n_cl)
-    log_MgII =  np.interp(log_n_cl, log_dens_bins, log_MgII_vals)
+
+    ## KHRR fixed bug in the next line
+    #log_MgII =  np.interp(log_n_cl, log_dens_bins, log_MgII_vals)
+    log_MgII = np.interp(X*log_n_cl, log_dens_bins, log_MgII_vals)
     return 10**log_MgII
 
 def calc_HI_frac(n_cl, X=0.74):
