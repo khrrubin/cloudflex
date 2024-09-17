@@ -1002,8 +1002,6 @@ class Rays:
         """
         print("Saving rays to %s" % filename)
 
-        from IPython import embed
-        embed()
         self.pathdict["coords"] = self.coords.tolist()
         self.pathdict["column_densities"] = self.column_densities.tolist()
         self.pathdict["EWs"] = self.EWs.tolist()
